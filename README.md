@@ -26,8 +26,8 @@ flowchart TD
 
 ```bash
 # With Poetry
-git clone <repo>
-cd llmroute
+git clone git@github.com:mangobanaani/tokenguard.git
+cd tokenguard
 cp .env.example .env  # Add OPENAI_API_KEY
 poetry install --with test
 poetry run app-serve
