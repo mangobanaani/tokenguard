@@ -62,7 +62,7 @@ LABEL org.opencontainers.image.title="TokenGuard" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.vendor="TokenGuard Project" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/yourorg/tokenguard"
+      org.opencontainers.image.source="https://github.com/mangobanaani/tokenguard"
 
 # Runtime environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
