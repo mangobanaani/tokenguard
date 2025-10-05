@@ -309,7 +309,7 @@ class TestErrorConditions:
         # Test fractional refill
         bucket.last_refill = time.time() - 2.0  # 2 seconds ago
         bucket._refill()
-        assert bucket.tokens == 93.0  # 90 + (1.5 * 2)
+        assert abs(bucket.tokens - 93.0) < 0.001  # 90 + (1.5 * 2), allow floating point error
 
 
 class TestConcurrencyEdgeCases:

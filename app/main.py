@@ -59,9 +59,8 @@ def estimate_chat_tokens(messages: List[Dict], model: str = "gpt-3.5-turbo") -> 
     input_tokens += 4  # Base tokens for chat format
     
     for message in messages:
-        role = message.get("role", "")
         content = message.get("content", "")
-        
+
         # Role tokens (role names + formatting)
         input_tokens += 4  # For role formatting
         input_tokens += estimate_tokens(content, model)
@@ -272,8 +271,8 @@ class RedisBucketManager:
         now = time.time()
         def_cap = self.default_caps.get(scope, 1000.0)
         def_rate = self.default_rates.get(scope, 5.0)
-        ok = self.client.eval(self.LUA_MULTI, 4, t_key, ts_key, r_key, c_key, 1, 0.0, now, def_cap, def_rate)
-        # we don't need ok here; snapshot is in keys now
+        self.client.eval(self.LUA_MULTI, 4, t_key, ts_key, r_key, c_key, 1, 0.0, now, def_cap, def_rate)
+        # snapshot is in keys now
         tokens = float(self.client.get(t_key) or def_cap)
         rate = float(self.client.get(r_key) or def_rate)
         cap = float(self.client.get(c_key) or def_cap)
@@ -324,7 +323,7 @@ class RedisBucketManager:
     def set_bucket(self, scope: str, sid: Optional[str], capacity: float, refill_rate: float) -> None:
         """Set bucket capacity and refill rate, and update current tokens."""
         sk = self._scope_key(scope, sid)
-        t, ts, r, c = self._keys_for(sk)
+        t, _ts, r, c = self._keys_for(sk)
         
         # Set the new capacity and refill rate
         self.client.set(c, str(capacity))
@@ -397,7 +396,7 @@ def background_openai_sync():
         logger.warning(f"Background OpenAI sync failed: {e}")
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Application lifespan manager"""
     sync_task = None
     executor = None
@@ -474,9 +473,6 @@ def update_global_limits_from_openai_headers(headers: Dict[str, str]):
         token_limit = headers.get('x-ratelimit-limit-tokens')
         token_remaining = headers.get('x-ratelimit-remaining-tokens')
         token_reset = headers.get('x-ratelimit-reset-tokens')
-        request_limit = headers.get('x-ratelimit-limit-requests')
-        request_remaining = headers.get('x-ratelimit-remaining-requests')
-        request_reset = headers.get('x-ratelimit-reset-requests')
         
         if token_limit and token_remaining and token_reset:
             # Update global token bucket capacity to match OpenAI limits
@@ -702,7 +698,7 @@ def get_bucket(scope: str, id: str):
     return {"scope": f"{scope}:{id}", "bucket": bucket.snapshot()}
 
 @app.post("/v1/chat/completions")
-def chat(request: Request, body: ChatRequest, response: Response, x_user_id: Optional[str] = Header(default=None), x_team_id: Optional[str] = Header(default=None), x_role: Optional[str] = Header(default=None), x_llm_rolegroup: Optional[str] = Header(default=None)):
+def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Optional[str] = Header(default=None), x_team_id: Optional[str] = Header(default=None), x_role: Optional[str] = Header(default=None), x_llm_rolegroup: Optional[str] = Header(default=None)):
     # Generate request ID for tracing
     request_id = str(uuid.uuid4())[:8]
     response.headers["x-request-id"] = request_id
@@ -741,7 +737,7 @@ def chat(request: Request, body: ChatRequest, response: Response, x_user_id: Opt
         logger.warning(f"Rate limited - request_id={request_id}, user_id={user_id}, scopes={[f'{s}:{sid}' for s, sid in scopes]}, cost={cost:.1f}")
         # Build rate limit headers for 429 response
         rate_limit_headers = {"Retry-After": "1"}
-        for scope_key, bucket_snap in snaps.items():
+        for _scope_key, bucket_snap in snaps.items():
             if bucket_snap["tokens"] < cost:
                 # Calculate time until this bucket refills enough tokens
                 tokens_needed = cost - bucket_snap["tokens"]
@@ -843,7 +839,7 @@ def chat(request: Request, body: ChatRequest, response: Response, x_user_id: Opt
                     logger.error(f"OpenAI API error - request_id={request_id}, status={openai_response.status_code}, response={openai_response.text}")
                     raise HTTPException(status_code=openai_response.status_code, detail=openai_response.text)
         
-        except Exception as http_error:
+        except Exception:
             # Fallback to regular OpenAI client (for testing/mocked scenarios)
             try:
                 client = OpenAI(api_key=OPENAI_API_KEY)

@@ -3,10 +3,10 @@
 # =============================================================================
 # Builder Stage - Install dependencies and build application
 # =============================================================================
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 # Build arguments for cache control
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.13
 ARG PIP_VERSION=24.3.1
 
 # Python optimization flags
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # =============================================================================
 # Runtime Stage - Minimal production image
 # =============================================================================
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 # Runtime arguments and labels
 ARG BUILD_DATE
