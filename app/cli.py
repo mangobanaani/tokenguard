@@ -1,12 +1,15 @@
 import os
 import sys
 import subprocess
+from app.constants import DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT, DEFAULT_RELOAD
 
 
 def run():
     """Start the API server with uvicorn."""
-    host = os.getenv("HOST", "0.0.0.0")
-    port = os.getenv("PORT", "8000")
+    host = os.getenv("HOST", DEFAULT_SERVER_HOST)
+    port = int(os.getenv("PORT", str(DEFAULT_SERVER_PORT)))
+    reload = os.getenv("RELOAD", str(DEFAULT_RELOAD)).lower() in ("1", "true", "yes", "on")
+    
     args = [
         sys.executable,
         "-m",
@@ -16,8 +19,11 @@ def run():
         host,
         "--port",
         str(port),
-        "--reload",
     ]
+    
+    if reload:
+        args.append("--reload")
+    
     os.execvp(args[0], args)
 
 
