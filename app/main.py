@@ -15,6 +15,15 @@ import redis
 import threading
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
+from app.token_estimator import token_estimator, TokenEstimator
+
+# Constants
+DEFAULT_MODEL = TokenEstimator.DEFAULT_MODEL
+DEFAULT_ANONYMOUS_USER = "anonymous"
+DEFAULT_OUTPUT_TOKENS = 150
+INPUT_OUTPUT_SPLIT_RATIO = 0.7  # 70% input, 30% output when estimating
+TEST_API_KEY_PREFIX = "test-"
+TEST_API_KEY_PLACEHOLDER = "sk-test"
 
 # Configure structured logging
 logging.basicConfig(
@@ -25,52 +34,17 @@ logger = logging.getLogger("llmroute")
 
 load_dotenv()
 
-# Token estimation functions
-def estimate_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
-    """
-    Estimate token count for text. 
-    Uses simple heuristic: ~4 characters per token for most models.
-    This is conservative and will be adjusted based on real OpenAI usage.
-    """
-    # Different models have different token ratios
-    char_per_token = {
-        "gpt-4": 4.0,
-        "gpt-4-turbo": 4.0, 
-        "gpt-4o": 4.0,
-        "gpt-4o-mini": 4.0,
-        "gpt-3.5-turbo": 4.0,
-        "text-davinci-003": 4.0,
-    }
-    
-    ratio = char_per_token.get(model, 4.0)
-    estimated = max(1, int(len(text) / ratio))
-    
-    # Add some overhead for chat format and system prompts
-    if "chat" in model or "gpt" in model:
-        estimated = int(estimated * 1.2)  # 20% overhead for chat formatting
-    
-    return estimated
+# Token estimation functions (using token_estimator module)
+def estimate_tokens(text: str, model: Optional[str] = None) -> int:
+    """Estimate token count for text using token_estimator."""
+    return token_estimator.estimate_tokens(text, model or DEFAULT_MODEL)
 
-def estimate_chat_tokens(messages: List[Dict], model: str = "gpt-3.5-turbo") -> Dict[str, int]:
-    """Estimate tokens for a chat conversation, returning input and output estimates separately."""
-    input_tokens = 0
-    
-    # Base overhead for chat format
-    input_tokens += 4  # Base tokens for chat format
-    
-    for message in messages:
-        content = message.get("content", "")
-
-        # Role tokens (role names + formatting)
-        input_tokens += 4  # For role formatting
-        input_tokens += estimate_tokens(content, model)
-    
-    # Additional overhead for completion
-    input_tokens += 3  # For assistant response preparation
-    
+def estimate_chat_tokens(messages: List[Dict], model: Optional[str] = None) -> Dict[str, int]:
+    """Estimate tokens for a chat conversation using token_estimator."""
+    estimates = token_estimator.estimate_chat_tokens(messages, model or DEFAULT_MODEL)
     return {
-        "input_tokens": input_tokens,
-        "output_tokens": 150  # Default estimate, will be updated by max_tokens if provided
+        "input_tokens": estimates["input_tokens"],
+        "output_tokens": estimates["output_tokens"]
     }
 
 class TokenBucket:
@@ -623,7 +597,12 @@ def set_budget(cfg: BudgetConfig):
 def sync_openai_limits():
     """Manually sync global rate limits with OpenAI API by making a test request."""
     # Skip sync in test environments
-    if OPENAI_API_KEY == "test-key" or not OPENAI_API_KEY:
+    is_test_env = (
+        not OPENAI_API_KEY or 
+        OPENAI_API_KEY.startswith(TEST_API_KEY_PREFIX) or 
+        OPENAI_API_KEY == TEST_API_KEY_PLACEHOLDER
+    )
+    if is_test_env:
         return {
             "status": "skipped",
             "reason": "test environment detected",
@@ -642,7 +621,7 @@ def sync_openai_limits():
         }
         
         test_request = {
-            "model": "gpt-3.5-turbo",
+            "model": DEFAULT_MODEL,
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 1
         }
@@ -703,7 +682,7 @@ def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Op
     request_id = str(uuid.uuid4())[:8]
     response.headers["x-request-id"] = request_id
     
-    user_id = x_user_id or body.userId or "anon"
+    user_id = x_user_id or body.userId or DEFAULT_ANONYMOUS_USER
     team_id = x_team_id
     role = x_role
     role_group = x_llm_rolegroup
@@ -711,11 +690,11 @@ def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Op
     # Estimate tokens if not provided
     if body.requestedTokens is not None:
         estimated_tokens = float(body.requestedTokens)
-        input_tokens_estimate = estimated_tokens * 0.7  # Assume 70% input, 30% output
-        output_tokens_estimate = estimated_tokens * 0.3
+        input_tokens_estimate = estimated_tokens * INPUT_OUTPUT_SPLIT_RATIO
+        output_tokens_estimate = estimated_tokens * (1 - INPUT_OUTPUT_SPLIT_RATIO)
     else:
         # Estimate based on input messages + expected output
-        token_estimates = estimate_chat_tokens([m.model_dump() for m in body.messages], body.model or "gpt-4o-mini")
+        token_estimates = estimate_chat_tokens([m.model_dump() for m in body.messages], body.model or DEFAULT_MODEL)
         input_tokens_estimate = token_estimates["input_tokens"]
         output_tokens_estimate = body.max_tokens or token_estimates["output_tokens"]
         estimated_tokens = input_tokens_estimate + output_tokens_estimate
@@ -756,7 +735,7 @@ def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Op
     try:
         # Try direct HTTP request first to capture rate limit headers
         request_data = {
-            "model": body.model or "gpt-4o-mini",
+            "model": body.model or DEFAULT_MODEL,
             "messages": [m.model_dump() for m in body.messages],
             "max_tokens": body.max_tokens
         }
@@ -827,7 +806,7 @@ def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Op
                             time_to_full = (user_bucket["capacity"] - user_bucket["tokens"]) / user_bucket["refillPerSec"]
                             response.headers["x-app-ratelimit-reset-tokens"] = f"{int(time_to_full)}s"
                     
-                    logger.info(f"Chat completion success - request_id={request_id}, user_id={user_id}, model={body.model or 'gpt-4o-mini'}, estimated_tokens={cost:.1f}, actual_tokens={actual_tokens or 'unknown'}")
+                    logger.info(f"Chat completion success - request_id={request_id}, user_id={user_id}, model={body.model or DEFAULT_MODEL}, estimated_tokens={cost:.1f}, actual_tokens={actual_tokens or 'unknown'}")
                     
                     return {
                         "success": True, 
@@ -843,7 +822,7 @@ def chat(_request: Request, body: ChatRequest, response: Response, x_user_id: Op
             # Fallback to regular OpenAI client (for testing/mocked scenarios)
             try:
                 client = OpenAI(api_key=OPENAI_API_KEY)
-                model = body.model or "gpt-4o-mini"
+                model = body.model or DEFAULT_MODEL
                 messages = [m.model_dump() for m in body.messages]
                 max_tokens = body.max_tokens
                 resp = client.chat.completions.create(model=model, messages=messages, max_tokens=max_tokens)
