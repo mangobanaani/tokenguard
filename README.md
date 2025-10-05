@@ -117,8 +117,6 @@ Test structure:
 - `tests/integration/` - Redis/OpenAI tests (12 tests, 8 skipped without Redis)
 - `tests/e2e/` - API behavior tests (3 tests)
 
-See `TEST_RESULTS.md` for detailed test results and coverage report.
-
 ## Configuration
 
 Environment variables:
@@ -155,8 +153,6 @@ LOG_LEVEL=INFO
 CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
 CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
 ```
-
-See `app/config.py` for all options.
 
 Headers:
 - `x-user-id` - User identifier (required)
@@ -224,8 +220,6 @@ The Docker Compose setup includes full monitoring:
 - `tokenguard_openai_requests_total` - OpenAI API requests
 - `tokenguard_redis_operations_total` - Redis operations
 
-See `app/metrics.py` for all 30+ available metrics.
-
 ### Health Checks
 
 ```bash
@@ -277,8 +271,6 @@ All improvements are **backward compatible**. New modules are ready but not yet 
 
 **Phase 2** will integrate these modules with async/await for 2-5x performance improvement.
 
-See `IMPROVEMENTS.md` and `COMPLETED_IMPROVEMENTS.md` for details.
-
 ## Performance
 
 ### Current (Phase 1)
@@ -292,15 +284,6 @@ See `IMPROVEMENTS.md` and `COMPLETED_IMPROVEMENTS.md` for details.
 -  **Latency**: 20-30% reduction with Redis pipelining
 -  **Caching**: Lua script caching for faster Redis ops
 
-## Documentation
-
-- **README.md** - This file (getting started, API docs)
-- **IMPROVEMENTS.md** - Detailed improvement guide with examples
-- **COMPLETED_IMPROVEMENTS.md** - Implementation summary and usage
-- **TEST_RESULTS.md** - Test results and verification report
-- **prometheus.yml** - Prometheus scrape configuration
-- **verify_improvements.py** - Automated verification script
-
 ## Contributing
 
 ```bash
@@ -312,9 +295,6 @@ pytest tests/ -v
 
 # Run with coverage
 pytest tests/ --cov=app --cov-report=html
-
-# Verify changes
-python verify_improvements.py
 
 # Format code (if you add black/ruff)
 # black app/ tests/
@@ -329,4 +309,3 @@ See LICENSE file for details.
 
 - **Issues**: https://github.com/mangobanaani/tokenguard/issues
 - **Discussions**: GitHub Discussions
-- **Documentation**: See `/docs` folder and improvement guides
