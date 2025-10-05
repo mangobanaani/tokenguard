@@ -15,6 +15,8 @@ from app.constants import (
 class TokenEstimator:
     """Estimates token usage for LLM requests."""
 
+    DEFAULT_MODEL = "gpt-4o-mini"
+
     def __init__(self):
         """Initialize token estimator with tiktoken support."""
         self._encodings: Dict[str, tiktoken.Encoding] = {}
@@ -34,11 +36,13 @@ class TokenEstimator:
                     return None
         return self._encodings.get(model)
 
-    def estimate_tokens(self, text: str, model: str = "gpt-3.5-turbo") -> int:
+    def estimate_tokens(self, text: str, model: Optional[str] = None) -> int:
         """
         Estimate token count for text using tiktoken if available,
         fallback to heuristic.
         """
+        if model is None:
+            model = self.DEFAULT_MODEL
         if not text:
             return 0
 
@@ -63,7 +67,7 @@ class TokenEstimator:
     def estimate_chat_tokens(
         self,
         messages: List[Dict],
-        model: str = "gpt-3.5-turbo",
+        model: Optional[str] = None,
         max_tokens: Optional[int] = None
     ) -> Dict[str, int]:
         """
@@ -72,6 +76,8 @@ class TokenEstimator:
         Returns:
             Dict with 'input_tokens' and 'output_tokens' estimates.
         """
+        if model is None:
+            model = self.DEFAULT_MODEL
         input_tokens = BASE_CHAT_TOKENS
 
         # Estimate input tokens
@@ -94,9 +100,11 @@ class TokenEstimator:
     def estimate_messages_tokens(
         self,
         messages: List[Dict],
-        model: str = "gpt-4o-mini"
+        model: Optional[str] = None
     ) -> int:
         """Estimate total tokens for messages (input only)."""
+        if model is None:
+            model = self.DEFAULT_MODEL
         estimates = self.estimate_chat_tokens(messages, model)
         return estimates["input_tokens"]
 
